@@ -17,6 +17,8 @@ def serialize_player(player):
         result['created_at'] = result['created_at'].isoformat()
     if 'updated_at' in result and isinstance(result['updated_at'], datetime):
         result['updated_at'] = result['updated_at'].isoformat()
+    if 'last_visit' in result and isinstance(result['last_visit'], datetime):
+        result['last_visit'] = result['last_visit'].isoformat()
     return result
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -61,12 +63,25 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     )
                     businesses = cur.fetchall()
                     
+                    cur.execute(
+                        "SELECT car_type, count FROM cars WHERE player_id = %s",
+                        (player['id'],)
+                    )
+                    cars = cur.fetchall()
+                    
+                    cur.execute(
+                        "UPDATE players SET total_visits = total_visits + 1, last_visit = CURRENT_TIMESTAMP WHERE id = %s",
+                        (player['id'],)
+                    )
+                    conn.commit()
+                    
                     return {
                         'statusCode': 200,
                         'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                         'body': json.dumps({
                             'player': serialize_player(player),
-                            'businesses': [dict(b) for b in businesses]
+                            'businesses': [dict(b) for b in businesses],
+                            'cars': [dict(c) for c in cars]
                         })
                     }
                 else:
@@ -113,7 +128,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             donat_balance = body.get('donat_balance')
             status = body.get('status')
             businesses = body.get('businesses', {})
+            cars = body.get('cars', {})
             is_admin = body.get('is_admin')
+            total_clicks = body.get('total_clicks')
             
             cur.execute("SELECT id FROM players WHERE username = %s", (username,))
             player = cur.fetchone()
@@ -142,6 +159,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if is_admin is not None:
                 update_fields.append("is_admin = %s")
                 update_values.append(is_admin)
+            if total_clicks is not None:
+                update_fields.append("total_clicks = %s")
+                update_values.append(total_clicks)
             
             if update_fields:
                 update_fields.append("updated_at = CURRENT_TIMESTAMP")
@@ -161,6 +181,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.execute(
                         "DELETE FROM businesses WHERE player_id = %s AND business_type = %s",
                         (player_id, int(business_type))
+                    )
+            
+            for car_type, count in cars.items():
+                if count > 0:
+                    cur.execute(
+                        "INSERT INTO cars (player_id, car_type, count) VALUES (%s, %s, %s) ON CONFLICT (player_id, car_type) DO UPDATE SET count = %s",
+                        (player_id, int(car_type), count, count)
+                    )
+                else:
+                    cur.execute(
+                        "DELETE FROM cars WHERE player_id = %s AND car_type = %s",
+                        (player_id, int(car_type))
                     )
             
             conn.commit()
