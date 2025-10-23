@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
+
+const API_URL = 'https://functions.poehali.dev/9c53a91b-4338-4487-b39c-1186acecb8f6';
 
 type Status = 'Бомж' | 'Богач' | 'Миллионер' | 'Миллиардер' | 'Читер' | 'VIP' | 'Хакер' | 'Бог';
 
@@ -15,6 +18,15 @@ interface Business {
   cost: number;
   income: number;
   emoji: string;
+}
+
+interface Player {
+  id: number;
+  username: string;
+  balance: number;
+  donat_balance: number;
+  status: Status;
+  is_admin: boolean;
 }
 
 const BUSINESSES: Business[] = [
@@ -40,12 +52,17 @@ export default function Index() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [currentUser, setCurrentUser] = useState('');
   const [balance, setBalance] = useState(0);
   const [donatBalance, setDonatBalance] = useState(0);
   const [status, setStatus] = useState<Status>('Бомж');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [ownedBusinesses, setOwnedBusinesses] = useState<Record<number, number>>({});
   const [passiveIncome, setPassiveIncome] = useState(0);
   const [lastClick, setLastClick] = useState(0);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const [adminAmount, setAdminAmount] = useState('');
   const { toast } = useToast();
 
   const formatNumber = (num: number) => {
@@ -59,6 +76,65 @@ export default function Index() {
     }
     return 'Бомж';
   };
+
+  const saveProgress = async () => {
+    if (!currentUser) return;
+    
+    try {
+      await fetch(API_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: currentUser,
+          balance,
+          donat_balance: donatBalance,
+          status,
+          businesses: ownedBusinesses
+        })
+      });
+    } catch (error) {
+      console.error('Save error:', error);
+    }
+  };
+
+  const loadProgress = async (username: string) => {
+    try {
+      const response = await fetch(`${API_URL}?username=${username}`);
+      const data = await response.json();
+      
+      if (data.player) {
+        setBalance(data.player.balance);
+        setDonatBalance(data.player.donat_balance);
+        setStatus(data.player.status);
+        setIsAdmin(data.player.is_admin);
+        
+        const businesses: Record<number, number> = {};
+        data.businesses.forEach((b: any) => {
+          businesses[b.business_type] = b.count;
+        });
+        setOwnedBusinesses(businesses);
+      }
+    } catch (error) {
+      console.error('Load error:', error);
+    }
+  };
+
+  const loadAllPlayers = async () => {
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      setAllPlayers(data.players || []);
+    } catch (error) {
+      console.error('Load players error:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      const interval = setInterval(saveProgress, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, balance, donatBalance, status, ownedBusinesses]);
 
   useEffect(() => {
     const newStatus = getStatus(balance);
@@ -85,12 +161,52 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [ownedBusinesses]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (login === 'plutka' && password === '123') {
-      setIsLoggedIn(true);
-      toast({ title: '✅ Вход выполнен успешно!' });
+      const username = 'admin_' + Date.now();
+      setCurrentUser(username);
+      
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+        
+        await fetch(API_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, is_admin: true })
+        });
+        
+        setIsAdmin(true);
+        setIsLoggedIn(true);
+        await loadAllPlayers();
+        toast({ title: '✅ Вход выполнен успешно!' });
+      } catch (error) {
+        toast({ title: '❌ Ошибка подключения', variant: 'destructive' });
+      }
     } else {
       toast({ title: '❌ Неверный логин или пароль', variant: 'destructive' });
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    const username = 'guest_' + Date.now();
+    setCurrentUser(username);
+    
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+      
+      await loadProgress(username);
+      setIsLoggedIn(true);
+      toast({ title: '✅ Добро пожаловать в игру!' });
+    } catch (error) {
+      toast({ title: '❌ Ошибка подключения', variant: 'destructive' });
     }
   };
 
@@ -145,6 +261,70 @@ export default function Index() {
     }
   };
 
+  const giveCoins = async () => {
+    if (!selectedPlayer || !adminAmount) return;
+    
+    try {
+      const player = allPlayers.find(p => p.username === selectedPlayer);
+      if (!player) return;
+      
+      await fetch(API_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: selectedPlayer,
+          balance: player.balance + parseInt(adminAmount)
+        })
+      });
+      
+      await loadAllPlayers();
+      setAdminAmount('');
+      toast({ title: `✅ Выдано ${formatNumber(parseInt(adminAmount))} монет` });
+    } catch (error) {
+      toast({ title: '❌ Ошибка', variant: 'destructive' });
+    }
+  };
+
+  const changePlayerStatus = async (newStatus: Status) => {
+    if (!selectedPlayer) return;
+    
+    try {
+      await fetch(API_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: selectedPlayer,
+          status: newStatus
+        })
+      });
+      
+      await loadAllPlayers();
+      toast({ title: `✅ Статус изменён на ${newStatus}` });
+    } catch (error) {
+      toast({ title: '❌ Ошибка', variant: 'destructive' });
+    }
+  };
+
+  const makeAdmin = async () => {
+    if (!selectedPlayer) return;
+    
+    try {
+      await fetch(API_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: selectedPlayer,
+          is_admin: true
+        })
+      });
+      
+      await loadAllPlayers();
+      toast({ title: `✅ Назначен администратор` });
+    } catch (error) {
+      toast({ title: '❌ Ошибка', variant: 'destructive' });
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -171,7 +351,7 @@ export default function Index() {
               Войти
             </Button>
             <button 
-              onClick={() => setIsLoggedIn(true)}
+              onClick={handleGuestLogin}
               className="text-xs text-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full"
             >
               Если вы не администратор
@@ -193,7 +373,7 @@ export default function Index() {
               </h2>
               <p className="text-sm text-muted-foreground">Доход за клик: {formatNumber(STATUS_CONFIG[status].clickIncome)}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setIsLoggedIn(false)}>
+            <Button variant="outline" size="sm" onClick={() => { setIsLoggedIn(false); saveProgress(); }}>
               <Icon name="LogOut" size={16} />
             </Button>
           </div>
@@ -223,9 +403,10 @@ export default function Index() {
         </Card>
 
         <Tabs defaultValue="business" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="business">🏢 Бизнесы</TabsTrigger>
             <TabsTrigger value="casino">🎰 Казино</TabsTrigger>
+            {isAdmin && <TabsTrigger value="admin">👑 Админ</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="business" className="space-y-3">
@@ -289,6 +470,87 @@ export default function Index() {
               </div>
             </Card>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="admin" className="space-y-3">
+              <Card className="p-6 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold mb-4">👑 Админ-панель</h3>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Выбрать игрока</label>
+                    <Select value={selectedPlayer} onValueChange={setSelectedPlayer}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выберите игрока" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allPlayers.map(player => (
+                          <SelectItem key={player.id} value={player.username}>
+                            {player.username} - {formatNumber(player.balance)} 💰
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Выдать монеты</label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Сумма"
+                        value={adminAmount}
+                        onChange={(e) => setAdminAmount(e.target.value)}
+                      />
+                      <Button onClick={giveCoins} disabled={!selectedPlayer}>
+                        Выдать
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Изменить статус</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(Object.keys(STATUS_CONFIG) as Status[]).map(st => (
+                        <Button
+                          key={st}
+                          onClick={() => changePlayerStatus(st)}
+                          variant="outline"
+                          size="sm"
+                          disabled={!selectedPlayer}
+                        >
+                          {st}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button onClick={makeAdmin} variant="destructive" className="w-full" disabled={!selectedPlayer}>
+                    Назначить администратором
+                  </Button>
+
+                  <Button onClick={loadAllPlayers} variant="outline" className="w-full">
+                    <Icon name="RefreshCw" size={16} className="mr-2" />
+                    Обновить список
+                  </Button>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <h4 className="font-semibold mb-2">📊 Топ игроков</h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {allPlayers.slice(0, 10).map((player, idx) => (
+                      <div key={player.id} className="flex justify-between text-sm p-2 bg-muted rounded">
+                        <span>#{idx + 1} {player.username}</span>
+                        <span className="font-bold">{formatNumber(player.balance)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
