@@ -170,9 +170,12 @@ export default function Index() {
             <Button onClick={handleLogin} className="w-full" size="lg">
               Войти
             </Button>
-            <p className="text-xs text-center text-muted-foreground">
+            <button 
+              onClick={() => setIsLoggedIn(true)}
+              className="text-xs text-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full"
+            >
               Если вы не администратор
-            </p>
+            </button>
           </div>
         </Card>
       </div>
