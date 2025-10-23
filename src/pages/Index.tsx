@@ -154,11 +154,14 @@ export default function Index() {
   };
 
   useEffect(() => {
-    if (currentUser) {
-      const interval = setInterval(saveProgress, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUser, balance, donatBalance, status, ownedBusinesses, ownedCars, totalClicks]);
+    if (!currentUser) return;
+    
+    const interval = setInterval(() => {
+      saveProgress();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   useEffect(() => {
     const newStatus = getStatus(balance);
