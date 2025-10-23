@@ -247,7 +247,7 @@ export default function Index() {
 
   const handleClick = () => {
     const now = Date.now();
-    if (now - lastClick < 1000) {
+    if (now - lastClick < 0) {
       toast({ title: '⏱️ Подождите секунду!', variant: 'destructive' });
       return;
     }
