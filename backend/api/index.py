@@ -70,6 +70,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cars = cur.fetchall()
                     
                     cur.execute(
+                        "SELECT house_type, count FROM houses WHERE player_id = %s",
+                        (player['id'],)
+                    )
+                    houses = cur.fetchall()
+                    
+                    cur.execute(
                         "UPDATE players SET total_visits = total_visits + 1, last_visit = CURRENT_TIMESTAMP WHERE id = %s",
                         (player['id'],)
                     )
@@ -81,7 +87,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'body': json.dumps({
                             'player': serialize_player(player),
                             'businesses': [dict(b) for b in businesses],
-                            'cars': [dict(c) for c in cars]
+                            'cars': [dict(c) for c in cars],
+                            'houses': [dict(h) for h in houses]
                         })
                     }
                 else:
@@ -129,6 +136,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             status = body.get('status')
             businesses = body.get('businesses', {})
             cars = body.get('cars', {})
+            houses = body.get('houses', {})
             is_admin = body.get('is_admin')
             total_clicks = body.get('total_clicks')
             
@@ -193,6 +201,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.execute(
                         "DELETE FROM cars WHERE player_id = %s AND car_type = %s",
                         (player_id, int(car_type))
+                    )
+            
+            for house_type, count in houses.items():
+                if count > 0:
+                    cur.execute(
+                        "INSERT INTO houses (player_id, house_type, count) VALUES (%s, %s, %s) ON CONFLICT (player_id, house_type) DO UPDATE SET count = %s",
+                        (player_id, int(house_type), count, count)
+                    )
+                else:
+                    cur.execute(
+                        "DELETE FROM houses WHERE player_id = %s AND house_type = %s",
+                        (player_id, int(house_type))
                     )
             
             conn.commit()

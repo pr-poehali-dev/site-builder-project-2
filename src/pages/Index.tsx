@@ -34,16 +34,31 @@ const BUSINESSES: Business[] = [
   { id: 2, name: 'Стартап', cost: 50000, income: 600, emoji: '💼' },
   { id: 3, name: 'Компания', cost: 250000, income: 3500, emoji: '🏢' },
   { id: 4, name: 'Корпорация', cost: 1000000, income: 15000, emoji: '🏭' },
-  { id: 5, name: 'ООО Миллиардеры', cost: 10000000, income: 200000, emoji: '🏛️' }
+  { id: 5, name: 'ООО Миллиардеры', cost: 10000000, income: 200000, emoji: '🏛️' },
+  { id: 6, name: 'IT Корпорация', cost: 50000000, income: 1000000, emoji: '💻' },
+  { id: 7, name: 'Банк', cost: 150000000, income: 3500000, emoji: '🏦' },
+  { id: 8, name: 'Нефтяная Империя', cost: 500000000, income: 12000000, emoji: '⛽' }
 ];
 
 const CARS: Business[] = [
   { id: 1, name: 'Ока', cost: 5000, income: 50, emoji: '🚗' },
   { id: 2, name: 'Лада', cost: 25000, income: 300, emoji: '🚙' },
-  { id: 3, name: 'BMW', cost: 150000, income: 2000, emoji: '🚘' },
-  { id: 4, name: 'Mercedes', cost: 800000, income: 10000, emoji: '🚐' },
-  { id: 5, name: 'Ferrari', cost: 5000000, income: 100000, emoji: '🏎️' },
-  { id: 6, name: 'Bugatti', cost: 25000000, income: 500000, emoji: '🏁' }
+  { id: 3, name: 'BMW M3', cost: 150000, income: 2000, emoji: '🚘' },
+  { id: 4, name: 'BMW M4', cost: 350000, income: 5000, emoji: '🏎️' },
+  { id: 5, name: 'BMW M5', cost: 600000, income: 8500, emoji: '🚗' },
+  { id: 6, name: 'BMW M5 F90', cost: 900000, income: 13000, emoji: '🏁' },
+  { id: 7, name: 'Mercedes', cost: 1500000, income: 20000, emoji: '🚐' },
+  { id: 8, name: 'Ferrari', cost: 5000000, income: 100000, emoji: '🏎️' },
+  { id: 9, name: 'Bugatti', cost: 25000000, income: 500000, emoji: '🏁' }
+];
+
+const HOUSES: Business[] = [
+  { id: 1, name: 'Квартира', cost: 100000, income: 1000, emoji: '🏠' },
+  { id: 2, name: 'Дом', cost: 500000, income: 6000, emoji: '🏡' },
+  { id: 3, name: 'Особняк', cost: 2000000, income: 30000, emoji: '🏘️' },
+  { id: 4, name: 'Вилла', cost: 8000000, income: 150000, emoji: '🏰' },
+  { id: 5, name: 'Пентхаус', cost: 20000000, income: 400000, emoji: '🌆' },
+  { id: 6, name: 'Остров', cost: 100000000, income: 2500000, emoji: '🏝️' }
 ];
 
 const STATUS_CONFIG: Record<Status, { min: number; clickIncome: number; color: string }> = {
@@ -68,7 +83,11 @@ export default function Index() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [ownedBusinesses, setOwnedBusinesses] = useState<Record<number, number>>({});
   const [ownedCars, setOwnedCars] = useState<Record<number, number>>({});
+  const [ownedHouses, setOwnedHouses] = useState<Record<number, number>>({});
   const [passiveIncome, setPassiveIncome] = useState(0);
+  const [isRacing, setIsRacing] = useState(false);
+  const [raceProgress, setRaceProgress] = useState(0);
+  const [botProgress, setBotProgress] = useState(0);
   const [lastClick, setLastClick] = useState(0);
   const [totalClicks, setTotalClicks] = useState(0);
   const [totalVisits, setTotalVisits] = useState(0);
@@ -104,6 +123,7 @@ export default function Index() {
           status,
           businesses: ownedBusinesses,
           cars: ownedCars,
+          houses: ownedHouses,
           total_clicks: totalClicks
         })
       });
@@ -137,6 +157,14 @@ export default function Index() {
           cars[c.car_type] = c.count;
         });
         setOwnedCars(cars);
+        
+        const houses: Record<number, number> = {};
+        if (data.houses) {
+          data.houses.forEach((h: any) => {
+            houses[h.house_type] = h.count;
+          });
+        }
+        setOwnedHouses(houses);
       }
     } catch (error) {
       console.error('Load error:', error);
@@ -186,7 +214,12 @@ export default function Index() {
         return sum + (car ? car.income * count : 0);
       }, 0);
       
-      const totalIncome = businessIncome + carIncome;
+      const houseIncome = Object.entries(ownedHouses).reduce((sum, [id, count]) => {
+        const house = HOUSES.find(h => h.id === parseInt(id));
+        return sum + (house ? house.income * count : 0);
+      }, 0);
+      
+      const totalIncome = businessIncome + carIncome + houseIncome;
       setPassiveIncome(totalIncome);
       
       if (totalIncome > 0) {
@@ -194,7 +227,7 @@ export default function Index() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [ownedBusinesses, ownedCars]);
+  }, [ownedBusinesses, ownedCars, ownedHouses]);
 
   const handleLogin = async () => {
     if (login === 'plutka' && password === '123') {
@@ -306,6 +339,78 @@ export default function Index() {
       toast({ title: `💰 Продан: ${car.name}` });
     }
   };
+
+  const buyHouse = (house: Business) => {
+    if (balance >= house.cost) {
+      setBalance(prev => prev - house.cost);
+      setOwnedHouses(prev => ({
+        ...prev,
+        [house.id]: (prev[house.id] || 0) + 1
+      }));
+      toast({ title: `✅ Куплен: ${house.name}` });
+    } else {
+      toast({ title: '❌ Недостаточно монет', variant: 'destructive' });
+    }
+  };
+
+  const sellHouse = (house: Business) => {
+    if (ownedHouses[house.id] && ownedHouses[house.id] > 0) {
+      const sellPrice = Math.floor(house.cost * 0.55);
+      setBalance(prev => prev + sellPrice);
+      setOwnedHouses(prev => ({
+        ...prev,
+        [house.id]: prev[house.id] - 1
+      }));
+      toast({ title: `💰 Продан: ${house.name}` });
+    }
+  };
+
+  const startRace = () => {
+    if (balance < 2000) {
+      toast({ title: '❌ Нужно 2000₽ для участия', variant: 'destructive' });
+      return;
+    }
+    setIsRacing(true);
+    setRaceProgress(0);
+    setBotProgress(0);
+  };
+
+  const handleRaceClick = () => {
+    if (!isRacing) return;
+    
+    setRaceProgress(prev => {
+      const newProgress = prev + 5;
+      if (newProgress >= 100) {
+        finishRace(true);
+        return 100;
+      }
+      return newProgress;
+    });
+    
+    setBotProgress(prev => {
+      const botSpeed = Math.random() * 4;
+      return Math.min(prev + botSpeed, 100);
+    });
+  };
+
+  const finishRace = (playerWon: boolean) => {
+    setIsRacing(false);
+    if (playerWon && raceProgress >= botProgress) {
+      setBalance(prev => prev + 15000);
+      toast({ title: '🏁 Победа! +15000₽', description: 'Вы выиграли гонку!' });
+    } else {
+      setBalance(prev => prev - 2000);
+      toast({ title: '😢 Поражение: -2000₽', variant: 'destructive' });
+    }
+    setRaceProgress(0);
+    setBotProgress(0);
+  };
+
+  useEffect(() => {
+    if (isRacing && botProgress >= 100 && raceProgress < 100) {
+      finishRace(false);
+    }
+  }, [botProgress, isRacing, raceProgress]);
 
   const playCasino = (bet: number) => {
     if (balance < bet) {
@@ -465,12 +570,14 @@ export default function Index() {
         </Card>
 
         <Tabs defaultValue="business" className="w-full">
-          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
-            <TabsTrigger value="business">🏢 Бизнесы</TabsTrigger>
-            <TabsTrigger value="cars">🚗 Авто</TabsTrigger>
-            <TabsTrigger value="profile">👤 Профиль</TabsTrigger>
-            <TabsTrigger value="casino">🎰 Казино</TabsTrigger>
-            {isAdmin && <TabsTrigger value="admin">👑 Админ</TabsTrigger>}
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-7' : 'grid-cols-6'}`}>
+            <TabsTrigger value="business">🏢</TabsTrigger>
+            <TabsTrigger value="cars">🚗</TabsTrigger>
+            <TabsTrigger value="houses">🏠</TabsTrigger>
+            <TabsTrigger value="race">🏁</TabsTrigger>
+            <TabsTrigger value="profile">👤</TabsTrigger>
+            <TabsTrigger value="casino">🎰</TabsTrigger>
+            {isAdmin && <TabsTrigger value="admin">👑</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="business" className="space-y-3">
@@ -547,6 +654,95 @@ export default function Index() {
             ))}
           </TabsContent>
 
+          <TabsContent value="houses" className="space-y-3">
+            {HOUSES.map(house => (
+              <Card key={house.id} className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{house.emoji}</span>
+                    <div>
+                      <h3 className="font-semibold">{house.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        💰 {formatNumber(house.cost)} | 📊 {formatNumber(house.income)}/сек
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-accent">×{ownedHouses[house.id] || 0}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => buyHouse(house)} 
+                    className="flex-1"
+                    disabled={balance < house.cost}
+                  >
+                    Купить
+                  </Button>
+                  <Button 
+                    onClick={() => sellHouse(house)}
+                    variant="outline"
+                    disabled={!ownedHouses[house.id] || ownedHouses[house.id] === 0}
+                  >
+                    Продать (55%)
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </TabsContent>
+
+          <TabsContent value="race" className="space-y-3">
+            <Card className="p-6 space-y-6">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold mb-2">🏁 Гонки</h3>
+                <p className="text-sm text-muted-foreground">
+                  Ставка: 2000₽ | Выигрыш: +15000₽ | Проигрыш: -2000₽
+                </p>
+              </div>
+
+              {!isRacing ? (
+                <Button onClick={startRace} className="w-full h-16 text-xl" disabled={balance < 2000}>
+                  Начать гонку
+                </Button>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>🏎️ Вы</span>
+                      <span className="font-bold">{raceProgress}%</span>
+                    </div>
+                    <div className="w-full h-8 bg-green-900/20 rounded-full overflow-hidden border-2 border-green-500">
+                      <div 
+                        className="h-full bg-green-500 transition-all duration-200"
+                        style={{ width: `${raceProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>🤖 Бот</span>
+                      <span className="font-bold">{Math.floor(botProgress)}%</span>
+                    </div>
+                    <div className="w-full h-8 bg-green-900/20 rounded-full overflow-hidden border-2 border-green-500">
+                      <div 
+                        className="h-full bg-green-500 transition-all duration-200"
+                        style={{ width: `${botProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <Button 
+                    onClick={handleRaceClick} 
+                    className="w-full h-20 text-2xl font-bold bg-green-600 hover:bg-green-700"
+                  >
+                    ВПЕРЁД! 🏁
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
           <TabsContent value="profile" className="space-y-3">
             <Card className="p-6 space-y-4">
               <div className="text-center mb-4">
@@ -560,49 +756,44 @@ export default function Index() {
                 </div>
                 
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">💰 Баланс</span>
+                  <span className="text-muted-foreground">💎 Донат валюта</span>
+                  <span className="font-bold text-purple-500">{formatNumber(donatBalance)}</span>
+                </div>
+
+                <div className="flex justify-between p-3 bg-muted rounded-lg">
+                  <span className="text-muted-foreground">💰 Валюта</span>
                   <span className="font-bold text-accent">{formatNumber(balance)}</span>
                 </div>
                 
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">📊 Текущий статус</span>
-                  <span className="font-bold" style={{ color: STATUS_CONFIG[status].color }}>{status}</span>
-                </div>
-                
-                <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">🖱️ Всего кликов</span>
-                  <span className="font-semibold">{formatNumber(totalClicks)}</span>
-                </div>
-                
-                <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">📅 Всего заходов</span>
-                  <span className="font-semibold">{totalVisits}</span>
-                </div>
-                
-                <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">⏰ Последний заход</span>
-                  <span className="font-semibold text-sm">
-                    {lastVisit ? new Date(lastVisit).toLocaleString('ru-RU') : 'Только что'}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">🏢 Бизнесов</span>
+                  <span className="text-muted-foreground">🏢 Бизнесы</span>
                   <span className="font-semibold">
                     {Object.values(ownedBusinesses).reduce((sum, count) => sum + count, 0)}
                   </span>
                 </div>
                 
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">🚗 Автомобилей</span>
+                  <span className="text-muted-foreground">🚗 Машины</span>
                   <span className="font-semibold">
                     {Object.values(ownedCars).reduce((sum, count) => sum + count, 0)}
                   </span>
                 </div>
+
+                <div className="flex justify-between p-3 bg-muted rounded-lg">
+                  <span className="text-muted-foreground">🏠 Дома</span>
+                  <span className="font-semibold">
+                    {Object.values(ownedHouses).reduce((sum, count) => sum + count, 0)}
+                  </span>
+                </div>
                 
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-muted-foreground">📈 Пассивный доход</span>
-                  <span className="font-bold text-accent">{formatNumber(passiveIncome)}/сек</span>
+                  <span className="text-muted-foreground">📈 Доход в секунду</span>
+                  <span className="font-bold text-accent">{formatNumber(passiveIncome)}</span>
+                </div>
+
+                <div className="flex justify-between p-3 bg-muted rounded-lg">
+                  <span className="text-muted-foreground">📊 Статус</span>
+                  <span className="font-bold" style={{ color: STATUS_CONFIG[status].color }}>{status}</span>
                 </div>
               </div>
             </Card>
@@ -673,6 +864,28 @@ export default function Index() {
                   </div>
 
                   <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Выдать себе</label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Сумма"
+                        value={adminAmount}
+                        onChange={(e) => setAdminAmount(e.target.value)}
+                      />
+                      <Button onClick={() => {
+                        const amount = parseInt(adminAmount);
+                        if (amount > 0) {
+                          setBalance(prev => prev + amount);
+                          toast({ title: `✅ Добавлено ${formatNumber(amount)}₽` });
+                          setAdminAmount('');
+                        }
+                      }}>
+                        Добавить
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="text-sm text-muted-foreground">Изменить статус</label>
                     <div className="grid grid-cols-2 gap-2">
                       {(Object.keys(STATUS_CONFIG) as Status[]).map(st => (
@@ -714,6 +927,10 @@ export default function Index() {
             </TabsContent>
           )}
         </Tabs>
+
+        <div className="text-center pt-8 pb-4 text-sm text-muted-foreground">
+          @plutstudio dev • 2025 ©
+        </div>
       </div>
     </div>
   );
