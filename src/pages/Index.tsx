@@ -145,7 +145,7 @@ export default function Index() {
         description: `Доход за клик: ${formatNumber(STATUS_CONFIG[newStatus].clickIncome)} монет`,
       });
     }
-  }, [balance]);
+  }, [balance, status]);
 
   useEffect(() => {
     const interval = setInterval(() => {
