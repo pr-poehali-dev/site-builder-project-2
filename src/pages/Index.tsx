@@ -170,6 +170,9 @@ export default function Index() {
             <Button onClick={handleLogin} className="w-full" size="lg">
               Войти
             </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              Если вы не администратор
+            </p>
           </div>
         </Card>
       </div>
